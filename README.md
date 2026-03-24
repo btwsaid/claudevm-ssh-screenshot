@@ -18,23 +18,36 @@ When running Claude Code on a VM via SSH, you can't paste screenshots directly. 
 - SSH access to your VM (bridged networking recommended)
 - PowerShell 5.1+ (ships with Windows)
 
-## Quick Start
+## Setup
 
-### 1. Set up the VM (one-time)
+### Option A: All-in-one from VM
 
-SSH into your VM and run:
+If you have OpenSSH Server enabled on Windows, run everything from the VM:
+
+```bash
+bash setup.sh
+```
+
+This will:
+- Create the screenshots directory on the VM
+- Copy files to Windows via SCP
+- Run `setup.ps1` on Windows via SSH
+
+> **Enable OpenSSH Server on Windows:** Settings > Apps > Optional Features > OpenSSH Server, then `Start-Service sshd` in PowerShell.
+
+### Option B: Set up each side separately
+
+**On the VM:**
 
 ```bash
 bash setup_vm.sh
 ```
 
-This creates `~/screenshots/`. Nothing else needs to be done on the VM — this persists across reboots.
-
-### 2. Set up Windows (one-time)
-
-Open PowerShell in the repo directory and run:
+**On Windows** (copy the repo first, then run in PowerShell):
 
 ```powershell
+scp -r user@vm-ip:/path/to/claude-screenshot C:\Users\User\Documents\claude-screenshot
+cd C:\Users\User\Documents\claude-screenshot
 .\setup.ps1
 ```
 
@@ -47,9 +60,9 @@ The setup script will:
 - Run an upload test
 - Optionally create a Scheduled Task to run the watcher at logon
 
-### 3. Take a screenshot
+### After setup
 
-Once the watcher is running, just take a screenshot and paste the path from your clipboard into Claude Code.
+Take a screenshot and paste the path from your clipboard into Claude Code.
 
 ## Snipping Tool Configuration
 
@@ -63,17 +76,31 @@ Alternatively, **Win+PrintScreen** always saves to the Screenshots folder.
 
 ## Managing the Watcher
 
-### Check if it's running
+If you added the PowerShell profile aliases during setup, you can use shorthand commands:
+
+| Command | What it does |
+|---|---|
+| `startscreenshot` | Start the watcher |
+| `stopscreenshot` | Stop the watcher |
+| `screenshotstatus` | Check if it's running |
+
+To add these aliases, add the following to your PowerShell profile (`notepad $PROFILE`):
 
 ```powershell
-# Check the Scheduled Task status
-Get-ScheduledTask -TaskName "claude-screenshot-watcher" | Select-Object State
-
-# Check if the process is running
-Get-Process powershell | Where-Object {$_.CommandLine -like "*screenshot_watcher*"}
+function startscreenshot { Start-ScheduledTask -TaskName "claude-screenshot-watcher" }
+function stopscreenshot { Stop-ScheduledTask -TaskName "claude-screenshot-watcher" }
+function screenshotstatus { Get-ScheduledTask -TaskName "claude-screenshot-watcher" | Select-Object State }
 ```
 
-### Start it
+### Full commands
+
+**Check if it's running:**
+
+```powershell
+Get-ScheduledTask -TaskName "claude-screenshot-watcher" | Select-Object State
+```
+
+**Start it:**
 
 ```powershell
 # Start via Scheduled Task (runs hidden in background)
@@ -83,37 +110,17 @@ Start-ScheduledTask -TaskName "claude-screenshot-watcher"
 .\screenshot_watcher.ps1
 ```
 
-### Stop it
+**Stop it:**
 
 ```powershell
-# Stop the Scheduled Task
 Stop-ScheduledTask -TaskName "claude-screenshot-watcher"
-
-# Or if running manually, just press Ctrl+C
 ```
 
-### Restart it
+**Restart it:**
 
 ```powershell
 Stop-ScheduledTask -TaskName "claude-screenshot-watcher"
 Start-ScheduledTask -TaskName "claude-screenshot-watcher"
-```
-
-### Remove the Scheduled Task entirely
-
-```powershell
-Unregister-ScheduledTask -TaskName "claude-screenshot-watcher" -Confirm:$false
-```
-
-### Re-create the Scheduled Task
-
-Run `.\setup.ps1` again, or manually:
-
-```powershell
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"C:\Users\User\Documents\claude-screenshot\screenshot_watcher.ps1`""
-$trigger = New-ScheduledTaskTrigger -AtLogon -User $env:USERNAME
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-Register-ScheduledTask -TaskName "claude-screenshot-watcher" -Action $action -Trigger $trigger -Settings $settings -Force
 ```
 
 ## Daily Usage
@@ -125,6 +132,36 @@ Register-ScheduledTask -TaskName "claude-screenshot-watcher" -Action $action -Tr
 5. Paste the path from clipboard into Claude Code
 
 Nothing needs to be done on the VM after initial setup.
+
+## Uninstall
+
+### Option A: All-in-one from VM
+
+```bash
+bash uninstall.sh
+```
+
+This removes the screenshots directory on the VM and optionally SSHs into Windows to run `uninstall.ps1` (requires OpenSSH Server on Windows).
+
+### Option B: Uninstall each side separately
+
+**On the VM:**
+
+```bash
+rm -rf ~/screenshots
+```
+
+**On Windows** (in PowerShell):
+
+```powershell
+.\uninstall.ps1
+```
+
+This will:
+- Stop and remove the Scheduled Task
+- Delete the config directory (`~\.config\claude-screenshot\`)
+- Remove `startscreenshot`/`stopscreenshot`/`screenshotstatus` from your PowerShell profile
+- Optionally delete the script files
 
 ## Manual Configuration
 
